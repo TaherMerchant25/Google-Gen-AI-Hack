@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import fetch from 'node-fetch';
 import dotenv from 'dotenv';
-
+import { ApifyClient } from 'apify-client';
 // Load environment variables
 dotenv.config();
 
@@ -12,6 +12,17 @@ const PORT = process.env.PORT || 3001;
 // X API credentials from environment variables
 const X_API_KEY = process.env.X_API_KEY;
 const X_API_SECRET = process.env.X_API_SECRET;
+const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
+
+if (!APIFY_TOKEN) {
+  console.error("❌ Missing APIFY_API_TOKEN in .env");
+  process.exit(1);
+}
+
+// ✅ Initialize Apify Client
+const client = new ApifyClient({
+  token: APIFY_TOKEN,
+});
 
 // Validate required environment variables
 if (!X_API_KEY || !X_API_SECRET) {
@@ -127,6 +138,69 @@ app.get('/api/tweets/search', async (req, res) => {
     res.status(500).json({ 
       error: 'Internal server error', 
       message: error.message 
+    });
+  }
+});
+
+app.get("/api/instagram/search", async (req, res) => {
+  try {
+    const { query = "" } = req.query;
+    console.log("📸 Instagram Search Query:", query);
+
+    // ✅ Prepare valid Apify Actor input
+    const input = {
+      addParentData: false,
+      directUrls: [
+        "https://www.instagram.com/bbcnews",
+        "https://www.instagram.com/ndtv",
+        "https://www.instagram.com/nytimes",
+        "https://www.instagram.com/timesofindia",
+      ],
+      enhanceUserSearchWithFacebookPage: false,
+      isUserReelFeedURL: false,
+      isUserTaggedFeedURL: false,
+      onlyPostsNewerThan: "3 days",
+      resultsLimit: 5,
+      resultsType: "posts",
+      searchType: "hashtag",
+      searchLimit: 5,
+      // ✅ FIXED: Apify expects a STRING, not an object
+      search: query || undefined,
+    };
+
+    // ✅ Run the Apify actor
+    const run = await client.actor("shu8hvrXbJbY3Eb9W").call(input);
+
+    // ✅ Retrieve dataset results
+    const { items } = await client.dataset(run.defaultDatasetId).listItems();
+    console.log(`✅ Retrieved ${items.length} Instagram posts.`);
+
+    // ✅ Map the posts safely
+    const posts = (items || []).map((item) => ({
+      id: item.id || item.url,
+      caption: item.caption || "No caption available",
+      url: item.url,
+      mediaUrl: item.videoUrl || item.displayUrl || "",
+      isVideo: !!item.videoUrl,
+      likes: item.likesCount || 0,
+      comments: item.commentsCount || 0,
+      views: item.videoViewCount || 0,
+      timestamp: item.timestamp || "",
+      username: item.ownerUsername || "unknown",
+      fullName: item.ownerFullName || "Unknown User",
+    }));
+
+    // ✅ Return clean JSON response
+    res.json({
+      success: true,
+      totalResults: posts.length,
+      posts,
+    });
+  } catch (error) {
+    console.error("❌ Instagram API error:", error);
+    res.status(500).json({
+      error: "Failed to fetch Instagram posts",
+      details: error.message,
     });
   }
 });

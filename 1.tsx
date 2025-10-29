@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Search, Newspaper, Twitter, ExternalLink, Calendar, TrendingUp, Eye, Heart, MessageCircle } from 'lucide-react';
+import { Instagram } from "lucide-react";
 
 export default function NewsRetriever() {
   const [activeTab, setActiveTab] = useState('news');
@@ -10,6 +11,7 @@ export default function NewsRetriever() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [topK, setTopK] = useState(10);
+  const [instaResults, setInstaResults] = useState([]);
   
   // API Proxy URL from environment
   const API_PROXY_URL = import.meta.env.VITE_API_PROXY_URL || 'http://localhost:3001';
@@ -103,12 +105,36 @@ export default function NewsRetriever() {
     }
   };
 
-  const handleSearch = () => {
-    if (activeTab === 'news') {
-      searchNewsAPI();
-    } else {
-      searchTwitter();
+  const searchInstagram = async () => {
+    if (!searchQuery.trim()) {
+      setError("Please enter a search query");
+      return;
     }
+
+    setLoading(true);
+    setError("");
+    setInstaResults([]);
+
+    try {
+      const url = `${API_PROXY_URL}/api/instagram/search?query=${encodeURIComponent(searchQuery)}`;
+      console.log("Fetching Instagram posts:", url);
+
+      const response = await fetch(url);
+      if (!response.ok) throw new Error("Failed to fetch Instagram posts");
+
+      const data = await response.json();
+      setInstaResults(data.posts || []);
+      if (data.posts.length === 0) setError("No Instagram posts found.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleSearch = () => {
+    if (activeTab === 'news') searchNewsAPI();
+    else if (activeTab === 'twitter') searchTwitter();
+    else searchInstagram();
   };
 
   const formatNumber = (num) => {
@@ -149,6 +175,14 @@ export default function NewsRetriever() {
           >
             <Twitter size={20} />
             X/Twitter API
+          </button>
+          <button
+            onClick={() => setActiveTab("instagram")}
+            className={`flex items-center gap-2 px-5 py-2 rounded-lg ${
+              activeTab === "instagram" ? "bg-blue-600" : "bg-slate-700"
+            }`}
+          >
+            <Instagram size={18} /> Instagram
           </button>
         </div>
 
@@ -290,6 +324,52 @@ export default function NewsRetriever() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {activeTab === "instagram" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {instaResults.map((post, i) => (
+                <div
+                  key={i}
+                  className="bg-slate-800 rounded-xl overflow-hidden shadow-md border border-slate-700 hover:scale-[1.01] transition-all"
+                >
+                  {post.isVideo ? (
+                    <video src={post.mediaUrl} controls className="w-full h-64 object-cover" />
+                  ) : (
+                    <img src={post.mediaUrl} alt="Insta post" className="w-full h-64 object-cover" />
+                  )}
+                  <div className="p-4">
+                    <p className="font-semibold text-lg mb-2">@{post.username}</p>
+                    <p className="text-slate-300 text-sm mb-3 line-clamp-3">{post.caption}</p>
+
+                    <div className="flex justify-between text-slate-400 text-sm">
+                      <span>❤️ {post.likes}</span>
+                      <span>💬 {post.comments}</span>
+                      {post.isVideo && <span>👀 {post.views}</span>}
+                    </div>
+
+                    <p className="text-xs text-slate-500 mt-2">
+                      {new Date(post.timestamp).toLocaleString()}
+                    </p>
+
+                    <a
+                      href={post.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 mt-2 inline-block hover:underline"
+                    >
+                      View on Instagram →
+                    </a>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Loading state */}
+          {loading && (
+            <div className="flex justify-center mt-6">
+              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-blue-400"></div>
             </div>
           )}
         </div>
